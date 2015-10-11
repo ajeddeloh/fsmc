@@ -52,10 +52,12 @@ fn get_valid_type() -> String {
     }
 }
 
-fn do_mpd_update(constraints: &Vec<MPDSearch>, conn: &mut TcpStream, reader: &mut BufReader<TcpStream>) {
+fn do_mpd_update(constraints: &Vec<MPDSearch>, conn: &mut TcpStream, reader: &mut BufReader<TcpStream>) -> Vec<String> {
     let mut search_string = String::from("search ");
     for constraint in constraints {
-        search_string.push_str(&constraint.to_mpd_string());
+        if constraint.search_term.len() > 0 {
+            search_string.push_str(&constraint.to_mpd_string());
+        }
     }
     search_string.push('\n');
     conn.write(search_string.as_bytes()).ok().expect("DEATH AND SUFFERING");
@@ -65,10 +67,49 @@ fn do_mpd_update(constraints: &Vec<MPDSearch>, conn: &mut TcpStream, reader: &mu
         buffer.clear();
         reader.read_line(&mut buffer).ok().expect("Failed to read from mpd socket");
         if buffer.starts_with("file: ") {
-            matched_tracks.push(String::from(&buffer[6..]));
+            matched_tracks.push(String::from(&buffer.trim()[6..]));
         }
     }
-    print_screen(&constraints, &matched_tracks);
+    matched_tracks
+}
+
+fn add_tracks(constraints: &Vec<MPDSearch>, conn: &mut TcpStream, reader: &mut BufReader<TcpStream>) {
+    let mut buffer = String::new();
+    let mut index = -1;
+    conn.write("status\n".as_bytes()).ok().expect("PLAGUE! Hi Y$");
+    while !buffer.starts_with("OK") && !buffer.starts_with("ACK") {
+        buffer.clear();
+        reader.read_line(&mut buffer).ok().expect("Failed to read from mpd socket");
+        if buffer.starts_with("playlistlength: ") {
+            index = buffer.trim()[16..].parse().ok().expect("Server returned invalid index");
+        }
+    }
+    println!("{}", index);
+
+    //build search string 
+    let mut search_string = String::from("searchadd ");
+    for constraint in constraints {
+        if constraint.search_term.len() > 0 {
+            search_string.push_str(&constraint.to_mpd_string());
+        }
+    }
+    search_string.push('\n');
+
+    conn.write(search_string.as_bytes()).ok().expect("DEATH AND SUFFERING");
+    let mut matched_tracks: Vec<String> = Vec::new();
+    while !buffer.starts_with("OK") && !buffer.starts_with("ACK") {
+        buffer.clear();
+        reader.read_line(&mut buffer).ok().expect("Failed to read from mpd socket");
+        if buffer.starts_with("file: ") {
+            matched_tracks.push(String::from(&buffer.trim()[6..]));
+        }
+    }
+
+    conn.write(format!("play {}\n",index).as_bytes()).ok().expect("Its 2am");
+    buffer.clear();
+    reader.read_line(&mut buffer).ok().expect("Error reading mpd");
+    assert!(buffer.starts_with("OK"));
+
 }
 
 fn print_screen(constraints: &Vec<MPDSearch>, files: &Vec<String>) {
@@ -103,30 +144,28 @@ fn main() {
     
     //create initial set of search constraints
     let mut constraints: Vec<MPDSearch> = Vec::new();
+    let mut matched_tracks: Vec<String> = Vec::new();
 
     loop {
+        //do_mpd_update(&constraints, &mut write_conn, &mut reader);
+        print_screen(&constraints, &matched_tracks);
         let current_search = MPDSearch { search_type: get_valid_type(), search_term: String::new() };
         if current_search.search_type == "" {
             break;
         }
-        addstr(&current_search.search_type);
         constraints.push(current_search);
+        print_screen(&constraints, &matched_tracks);
+
+        
         let mut c = get_valid_char();
         while c != '\n' {
-            addch(c as u64);
             constraints.last_mut().unwrap().search_term.push(c);
-            refresh();
-
-            do_mpd_update(&constraints, &mut write_conn, &mut reader);
+            matched_tracks = do_mpd_update(&constraints, &mut write_conn, &mut reader);
+            print_screen(&constraints, &matched_tracks);
             c = get_valid_char();
         }
-        addch('\n' as u64);
-        refresh();
-
     }   
     endwin();
-    for constraint in &constraints {
-        println!("{:?}", constraint);
-    }
-    println!("Added songs");
+    add_tracks(&constraints, &mut write_conn, &mut reader);   
+    println!("Added {} songs", matched_tracks.len());
 }
