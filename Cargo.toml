@@ -1,0 +1,9 @@
+[package]
+name = "fsmc"
+description = "Fast Searching MPD Client"
+version = "0.0.1"
+authors = ["Andrew Jeddeloh <andrewjeddeloh@gmail.com>"]
+
+[dependencies]
+mpd = "*"
+ncurses = "*"
