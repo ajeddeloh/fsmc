@@ -203,25 +203,26 @@ fn main() {
     }//end using rustbox
 
     //get the current playlist length
-    let last_pos_str = mpc.send_command("status")
+    let last_pos: String = mpc.send_command("status")
         .into_iter()
         .find(|x| x.starts_with("playlistlength: "))
-        .unwrap();
-    let last_pos = last_pos_str
+        .unwrap()
         .split(' ')
         .last()
-        .unwrap();
-    println!("{}", last_pos);
-    if constraints.is_empty() {
+        .unwrap()
+        .into();
+    
+    if constraints.is_empty() { //no songs, nothing to do
         return ;
     }
+
     let mut query = String::from("searchadd ");
     for constraint in &constraints {
         query.push_str(&constraint.to_mpd_string());
     };
     mpc.send_command(&query);
-    query = String::from("play ");
-    query.push_str(last_pos);
+
+    query = format!("play {}", last_pos);
     mpc.send_command(&query);
 
 }

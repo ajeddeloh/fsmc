@@ -1,11 +1,13 @@
 Fast Searching MPD Client
 
-If you dont have MPD installed and running it wont work (duh!)
+If you dont have MPD installed and running it wont work 
 
-I made this because i wanted a FAST way to search for and play music, mpc/nmpc/nmpcpp take to long because:
-mpc - you have to spend so much time typing the args, no instant feedback if you mispell something (Dave Brubeck should be spelled Dave Brubek, fuck that guy)
-nmpc[pp] - you have to navigate, cant filter as fast
-Also i watned to learn rust
+I made this because I wanted a FAST way to search for and play music, and none of the other clients
+I've tried did this well. Most of them involve either navigating through menus or typing out names
+of artist/albums/titles with no indication of whether you mispelled something. This can be thought
+of as a mpc with autocomplete but only for adding and playing songs.
+
+Also I wanted to start learning rust and this was a good intro project.
 
 running:
  install rust and cargo
@@ -23,12 +25,3 @@ launch it then type (dont include *):
 
 then type what you want to search followed by enter
 then either hit enter again to add the songs and start playing them or continue to refine your search
-
-first project in rust. WOOOO
-
-Things that are broken:
- - Backspace (dont even try)
- - There was something else but i forgot
-
- Its 2AM. Goog night!
-
