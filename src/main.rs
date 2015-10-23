@@ -1,6 +1,7 @@
 extern crate rustbox;
 
-use std::io::{BufReader, BufRead, Write};
+use std::io;
+use std::io::{BufReader, BufRead, Write, Error, ErrorKind};
 use std::net::TcpStream;
 
 use rustbox::{Color, RustBox, Event, Key};
@@ -40,24 +41,21 @@ struct MPC {
 }
 
 impl MPC {
-    pub fn new() -> MPC {
+    pub fn new() -> io::Result<MPC> {
         let mut buf = String::new();
-        let write_conn = match TcpStream::connect("localhost:6600") {
-            Ok(v) => v,
-            Err(e) => panic!("Could not connect to MPD.\n{}", e)
-        };
-        let read_conn = match write_conn.try_clone() {
-            Ok(v) => v,
-            Err(e) => panic!("Could not clone MPD connection for reading\n{}", e)
-        };
+        let write_conn = try!(TcpStream::connect("localhost:6600"));
+        let read_conn = try!(write_conn.try_clone());
+        
         //intentionally transferring ownership
         let mut reader = BufReader::new(read_conn);
-        reader.read_line(&mut buf).unwrap();
-        assert!(buf.starts_with("OK"), "MPD connected, but did not return OK upon connection");
-        MPC {
+        try!(reader.read_line(&mut buf));
+        if !buf.starts_with("OK") {
+            return Err(Error::new(ErrorKind::Other, "Mpd did not return OK"));
+        }
+        Ok(MPC {
             connection: write_conn,
             reader: reader
-        }
+        })
     }
 
     fn send_command(&mut self, command: &str) -> Vec<String> {
@@ -135,7 +133,10 @@ impl State {
     }
 }
 fn main() {
-    let mut mpc = MPC::new();
+    let mut mpc = match MPC::new() { 
+        Ok(m) => m,
+        Err(_) => panic!("Panicing here isn't too bad is it?")
+    };
 
     let mut constraints: Vec<Constraint> = Vec::new();
     let mut state = State::NeedType;
