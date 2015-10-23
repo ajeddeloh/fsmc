@@ -25,3 +25,5 @@ launch it then type (dont include *):
 
 then type what you want to search followed by enter
 then either hit enter again to add the songs and start playing them or continue to refine your search
+
+Todo: Move the TCP connection to a seperate thread to reduce typing latentcy
