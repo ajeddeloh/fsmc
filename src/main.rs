@@ -5,14 +5,23 @@ use std::net::TcpStream;
 
 use rustbox::{Color, RustBox, Event, Key};
 
-#[derive(Debug)]
 struct Constraint {
     search_type: String,
     search_term: String,
 }
 
 impl Constraint {
-    pub fn new(srch_type: String ) -> Constraint {
+    pub fn new(metadata_type: char ) -> Constraint {
+        let srch_type = String::from(match metadata_type {
+            ' ' => "any",
+            't' => "title",
+            'T' => "track",
+            'd' => "disc",
+            'b' => "album",
+            'a' => "artist",
+            'A' => "albumartist",
+            _ => panic!("Tried to create constraint from invalid metadata type")
+        });
         Constraint {search_type: srch_type, search_term: String::new() }
     }
 
@@ -70,18 +79,17 @@ impl MPC {
     }
 }
 
-fn char_to_mpd_type(c: char) -> Option<String> {
+fn char_is_mpd_type(c: char) -> bool {
     match c {
-        ' ' => Some("any"),
-        't' => Some("title"),
-        'T' => Some("track"),
-        'd' => Some("disc"),
-        'b' => Some("album"),
-        'a' => Some("artist"),
-        'A' => Some("albumartist"),
-        '\n' => Some(""), //end of input
-        _ => None
-    }.map(|x| x.to_string())
+        ' ' => true,
+        't' => true,
+        'T' => true,
+        'd' => true,
+        'b' => true,
+        'a' => true,
+        'A' => true,
+        _ => false
+    }
 }
 
 fn print_screen(constraints: &Vec<Constraint>, files: &Vec<String>, rustbox: &RustBox) {
@@ -151,56 +159,55 @@ fn main() {
             //update display
             print_screen(&constraints, &matched_files, &rustbox);
 
-            //get input
+            //get input, discard everything but key events
             let key = match rustbox.poll_event(false) {
                 Ok(Event::KeyEvent(key)) => key,
                 Ok(_) => None,
                 Err(e) => panic!("Error with rustbox {}",e)
             };
 
-            //ungodly state transition matrix
-            state = match (state, key) {
-                //handle all cases we should never reach
-                (State::ShouldExit,   _) => panic!("unreachable code reached!"),
-                (State::ShouldCommit, _) => panic!("unreachable code reached!"),
-                //handle all cases where we got no input
-                (State::NeedType,     None) => State::NeedType,
-                (State::NeedString,   None) => State::NeedString,
-                (_, Some(Key::Esc)) => State::ShouldExit,
-                //handle all cases for NeedType
-                (State::NeedType, Some(Key::Enter)) => State::ShouldCommit,
-                (State::NeedType, Some(Key::Backspace)) => match constraints.is_empty() {
-                        true  => State::NeedType, //lready at the end
-                        false => {
+            //invariant: You can only be in State::NeedString if constraints is non-empty
+            state = match state {
+                State::ShouldExit => panic!("Unreachable code reached!"),
+                State::ShouldCommit => panic!("Unreachable code reached!"),
+                State::NeedType => match key {
+                    None => State::NeedType,
+                    Some(k) => match k {
+                        Key::Esc => State::ShouldExit,
+                        Key::Enter => State::ShouldCommit,
+                        Key::Backspace => match constraints.pop() {
+                            None => State::NeedType,
+                            Some(_) => State::NeedString,
+                        },
+                        Key::Char(x) if char_is_mpd_type(x) => {
+                            constraints.push(Constraint::new(x));
+                            State::NeedString
+                        },
+                        _ => State::NeedType,
+                    }
+                },
+                State::NeedString => match key {
+                    None => State::NeedString,
+                    Some(k) => match k {
+                        Key::Esc => State::ShouldExit,
+                        Key::Enter => State::NeedType,
+                        Key::Backspace => match constraints.last_mut().unwrap().search_term.pop() {
+                            None => {
                                 constraints.pop();
-                                State::NeedString
-                            }
-                    },
-                (State::NeedType, Some(Key::Char(x))) => match char_to_mpd_type(x) {
-                        Some(str) => {
-                                constraints.push(Constraint::new(str));
-                                State::NeedString
+                                State::NeedType
                             },
-                        None => State::NeedType
-                    },
-                (State::NeedType, _) => State::NeedType,
-                //
-                (State::NeedString, Some(Key::Enter)) => State::NeedType,
-                (State::NeedString, Some(Key::Backspace)) => match constraints.is_empty() {
-                        false => {
-                                constraints.last_mut().unwrap().search_term.pop();
-                                State::NeedString
-                            },
-                        true => State::NeedType
-                    },
-                (State::NeedString, Some(Key::Char(x))) if x.is_alphanumeric() || x.is_whitespace() => {
-                        constraints.last_mut().unwrap().search_term.push(x);
-                        State::NeedString
-                    },
-                (State::NeedString, _) => State::NeedString
-            };
+                            Some(_) => State::NeedString
+                        },
+                        Key::Char(x) if x.is_alphanumeric() || x.is_whitespace() => {
+                            constraints.last_mut().unwrap().search_term.push(x);
+                            State::NeedString
+                        },
+                        _ => State::NeedString
+                    }
+                }
+            }
         }
-    }//end using rustbox
+    }//end using rustbox, needed if we want to print errors since rustbox hijacks the term
 
     //get the current playlist length
     let last_pos: String = mpc.send_command("status")
