@@ -12,18 +12,17 @@ struct Constraint {
 }
 
 impl Constraint {
-    pub fn new(metadata_type: char ) -> Constraint {
-        let srch_type = String::from(match metadata_type {
-            ' ' => "any",
-            't' => "title",
-            'T' => "track",
-            'd' => "disc",
-            'b' => "album",
-            'a' => "artist",
-            'A' => "albumartist",
-            _ => panic!("Tried to create constraint from invalid metadata type")
-        });
-        Constraint {search_type: srch_type, search_term: String::new() }
+    pub fn new(metadata_type: char ) -> Option<Constraint> {
+        match metadata_type {
+            ' ' => Some("any"),
+            't' => Some("title"),
+            'T' => Some("track"),
+            'd' => Some("disc"),
+            'b' => Some("album"),
+            'a' => Some("artist"),
+            'A' => Some("albumartist"),
+            _ => None,
+        }.map( |s| Constraint {search_type: String::from(s), search_term: String::new() })
     }
 
     fn to_mpd_string(&self) -> String {
@@ -58,35 +57,22 @@ impl MPC {
         })
     }
 
-    fn send_command(&mut self, command: &str) -> Vec<String> {
-        self.connection.write(command.as_bytes()).ok().expect("Error writing to MPD");
-        self.connection.write("\n".as_bytes()).ok().expect("Error writing to MPD");
+    fn send_command(&mut self, command: &str) -> io::Result<Vec<String>> {
+        try!(self.connection.write(command.as_bytes()));
+        try!(self.connection.write("\n".as_bytes()));
         let mut results: Vec<String> = Vec::new();
         let mut buf = String::new();
         loop {
             buf.clear();
-            self.reader.read_line(&mut buf).ok().expect("Error reading from MPD");
+            try!(self.reader.read_line(&mut buf));
             if buf == "OK\n" {
-                return results;
+                return Ok(results);
             } else if buf.starts_with("ACK") {
-                panic!("MPD returned an ACK for command {}", command);
+                return Err(Error::new(ErrorKind::Other, "MPD Ack'd instead of OK'd"));
             } else {
                 results.push(String::from(buf.trim()));
             }
         }
-    }
-}
-
-fn char_is_mpd_type(c: char) -> bool {
-    match c {
-        ' ' => true,
-        't' => true,
-        'T' => true,
-        'd' => true,
-        'b' => true,
-        'a' => true,
-        'A' => true,
-        _ => false
     }
 }
 
@@ -153,7 +139,7 @@ fn main() {
                     for constraint in &constraints {
                         query.push_str(&constraint.to_mpd_string());
                     };
-                    mpc.send_command(&query).into_iter().filter(|x| x.starts_with("file")).collect()
+                    mpc.send_command(&query).unwrap().into_iter().filter(|x| x.starts_with("file")).collect()
                 }
             };
             
@@ -180,11 +166,14 @@ fn main() {
                             None => State::NeedType,
                             Some(_) => State::NeedString,
                         },
-                        Key::Char(x) if char_is_mpd_type(x) => {
-                            constraints.push(Constraint::new(x));
-                            State::NeedString
+                        Key::Char(x) => match Constraint::new(x) {
+                            Some(c) => {
+                                constraints.push(c);
+                                State::NeedString
+                            },
+                            None => State::NeedType
                         },
-                        _ => State::NeedType,
+                        _ => State::NeedType
                     }
                 },
                 State::NeedString => match key {
@@ -211,7 +200,7 @@ fn main() {
     }//end using rustbox, needed if we want to print errors since rustbox hijacks the term
 
     //get the current playlist length
-    let last_pos: String = mpc.send_command("status")
+    let last_pos: String = mpc.send_command("status").unwrap()
         .into_iter()
         .find(|x| x.starts_with("playlistlength: "))
         .unwrap()
@@ -231,6 +220,6 @@ fn main() {
     mpc.send_command(&query);
 
     query = format!("play {}", last_pos);
-    mpc.send_command(&query);
+    mpc.send_command(&query).ok();
 
 }
