@@ -3,6 +3,8 @@ extern crate rustbox;
 use std::io;
 use std::io::{BufReader, BufRead, Write, Error, ErrorKind};
 use std::net::TcpStream;
+use std::str::SplitWhitespace;
+use std::ops::Deref;
 
 use rustbox::{Color, RustBox, Event, Key};
 
@@ -200,14 +202,14 @@ fn main() {
     }//end using rustbox, needed if we want to print errors since rustbox hijacks the term
 
     //get the current playlist length
-    let last_pos: String = mpc.send_command("status").unwrap()
-        .into_iter()
-        .find(|x| x.starts_with("playlistlength: "))
-        .unwrap()
-        .split(' ')
-        .last()
-        .unwrap()
-        .into();
+    let last_pos: String = mpc.send_command("status").ok()
+        .map(Vec::into_iter)
+        .and_then(|mut x| x.find(|i| i.starts_with("playlistlength: ")))
+        .as_ref() //so we can later call into()
+        .map(|x| x.split_whitespace())
+        .and_then(SplitWhitespace::last)
+        .map(|x| x.into())
+        .unwrap();
     
     if constraints.is_empty() { //no songs, nothing to do
         return ;
