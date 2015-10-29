@@ -1,10 +1,8 @@
 extern crate rustbox;
 
-use std::io;
-use std::io::{BufReader, BufRead, Write, Error, ErrorKind};
+use std::io::{BufReader, BufRead, Write, Error, ErrorKind, Result};
 use std::net::TcpStream;
-use std::str::SplitWhitespace;
-use std::ops::Deref;
+use std::process::exit;
 
 use rustbox::{Color, RustBox, Event, Key};
 
@@ -27,7 +25,7 @@ impl Constraint {
         }.map( |s| Constraint {search_type: String::from(s), search_term: String::new() })
     }
 
-    fn to_mpd_string(&self) -> String {
+       fn to_mpd_string(&self) -> String {
         format!("{} \"{}\" ", self.search_type, self.search_term)
     }
 
@@ -42,7 +40,7 @@ struct MPC {
 }
 
 impl MPC {
-    pub fn new() -> io::Result<MPC> {
+    pub fn new() -> Result<MPC> {
         let mut buf = String::new();
         let write_conn = try!(TcpStream::connect("localhost:6600"));
         let read_conn = try!(write_conn.try_clone());
@@ -59,7 +57,7 @@ impl MPC {
         })
     }
 
-    fn send_command(&mut self, command: &str) -> io::Result<Vec<String>> {
+    fn send_command(&mut self, command: &str) -> Result<Vec<String>> {
         try!(self.connection.write(command.as_bytes()));
         try!(self.connection.write("\n".as_bytes()));
         let mut results: Vec<String> = Vec::new();
@@ -201,13 +199,17 @@ fn main() {
         }
     }//end using rustbox, needed if we want to print errors since rustbox hijacks the term
 
+    match state { 
+        State::ShouldExit => { exit(0) },
+        _ => {}
+    }
+
     //get the current playlist length
     let last_pos: String = mpc.send_command("status").ok()
         .map(Vec::into_iter)
         .and_then(|mut x| x.find(|i| i.starts_with("playlistlength: ")))
         .as_ref() //so we can later call into()
-        .map(|x| x.split_whitespace())
-        .and_then(SplitWhitespace::last)
+        .and_then(|x| x.split_whitespace().last())
         .map(|x| x.into())
         .unwrap();
     
