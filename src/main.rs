@@ -211,7 +211,7 @@ fn main() {
         .as_ref() //so we can later call into()
         .and_then(|x| x.split_whitespace().last())
         .map(|x| x.into())
-        .unwrap();
+        .expect("Failed to get playlist length, aborting");
     
     if constraints.is_empty() { //no songs, nothing to do
         return ;
@@ -221,9 +221,9 @@ fn main() {
     for constraint in &constraints {
         query.push_str(&constraint.to_mpd_string());
     };
-    mpc.send_command(&query);
+    mpc.send_command(&query).ok().expect("failed to submit new songs to play, aborting");
 
     query = format!("play {}", last_pos);
-    mpc.send_command(&query).ok();
+    mpc.send_command(&query).ok().expect("failed to submit play request to mpd. aborting");
 
 }
